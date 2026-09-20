@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pg-init-script
+  namespace: app
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS departments (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL UNIQUE,
+        code VARCHAR(10) NOT NULL,
+        metadata JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS employees (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        department_id INT REFERENCES departments(id) ON DELETE SET NULL,
+        first_name VARCHAR(50) NOT NULL,
+        last_name VARCHAR(50) NOT NULL,
+        email VARCHAR(100) UNIQUE,
+        salary NUMERIC(10, 2) CHECK (salary > 0),
+        hire_date DATE NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+        id BIGSERIAL PRIMARY KEY,
+        employee_id UUID, -- связь без strict foreign key для имитации сырых логов
+        action VARCHAR(100) NOT NULL,
+        ip_address INET,
+        client_agent TEXT,
+        logged_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX idx_emp_dept ON employees(department_id);
+    CREATE INDEX idx_audit_logged_at ON audit_logs(logged_at);
+
+    INSERT INTO departments (name, code, metadata) VALUES
+    ('Executive Management', 'EXEC', '{"floor": 5, "budget_code": "E-101"}'),
+    ('Information Technology', 'IT', '{"floor": 3, "budget_code": "IT-204", "stack": ["K8s", "Postgres", "Go"]}'),
+    ('Human Resources', 'HR', '{"floor": 2, "budget_code": "HR-301"}'),
+    ('Finance & Accounting', 'FIN', '{"floor": 4, "budget_code": "FIN-402"}'),
+    ('Research & Development', 'R&D', '{"floor": 3, "budget_code": "RD-205", "confidential": true}');
+
+    INSERT INTO employees (id, department_id, first_name, last_name, email, salary, hire_date, is_active) VALUES
+    ('a1111111-1111-1111-1111-111111111111', 1, 'Alexander', 'Lavrov', 'a.lavrov@company.local', 150000.00, '2020-01-15', true),
+    ('b2222222-2222-2222-2222-222222222222', 2, 'Dmitry', 'Petrov', 'd.petrov@company.local', 120000.00, '2021-03-10', true),
+    ('c3333333-3333-3333-3333-333333333333', 2, 'Elena', 'Sidorova', 'e.sidorova@company.local', 115000.00, '2021-06-01', true),
+    ('d4444444-4444-4444-4444-444444444444', 3, 'Anna', 'Kuznetsova', 'a.kuznetsova@company.local', 85000.00, '2019-11-20', true),
+    ('e5555555-5555-5555-5555-555555555555', 4, 'Mikhail', 'Smirnov', 'm.smirnov@company.local', 95000.00, '2022-02-01', true),
+    ('f6666666-6666-6666-6666-666666666666', 5, 'Sergey', 'Volkov', 's.volkov@company.local', 130000.00, '2020-08-14', false);
+
+    INSERT INTO employees (department_id, first_name, last_name, email, salary, hire_date)
+    SELECT 
+        (mod(g, 5) + 1),
+        'Employee_' || g,
+        'Staff_' || g,
+        'user_' || g || '@company.local',
+        60000.00 + (g * 1500),
+        CAST('2022-01-01'::date + (g || ' days')::interval AS date)
+    FROM generate_series(1, 15) g;
+
+    INSERT INTO audit_logs (employee_id, action, ip_address, client_agent, logged_at)
+    SELECT 
+        CASE 
+            WHEN g % 3 = 0 THEN 'a1111111-1111-1111-1111-111111111111'::uuid
+            WHEN g % 3 = 1 THEN 'b2222222-2222-2222-2222-222222222222'::uuid
+            ELSE 'c3333333-3333-3333-3333-333333333333'::uuid
+        END,
+        CASE 
+            WHEN g % 4 = 0 THEN 'USER_LOGIN'
+            WHEN g % 4 = 1 THEN 'DATA_EXPORT'
+            WHEN g % 4 = 2 THEN 'PASSWORD_RESET_REQ'
+            ELSE 'USER_LOGOUT'
+        END,
+        CAST('192.168.1.' || (10 + (g % 50)) AS inet),
+        'Mozilla/5.0 (X11; Linux x86_64) PostgreSQL/15-Client-v' || g,
+        NOW() - (g || ' hours')::interval
+    FROM generate_series(1, 250) g;
+
+

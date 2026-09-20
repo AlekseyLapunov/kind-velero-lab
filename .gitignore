@@ -1,0 +1,3 @@
+helm/s3-credentials
+scripts/helpers/.env.pg_creds
+scripts/logs/

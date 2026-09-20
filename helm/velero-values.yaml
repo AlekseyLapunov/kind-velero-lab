@@ -1,0 +1,39 @@
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.14.2
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: "demoapp-backup"
+      credential:
+        name: s3-credentials
+        key: cloud
+      config:
+        region: minio
+        s3ForcePathStyle: "true"
+        s3Url: http://192.168.1.149:9000
+
+  volumeSnapshotLocation:
+    - name: default
+      provider: aws
+      credential:
+        name: s3-credentials
+        key: cloud
+      config:
+        region: minio
+
+credentials:
+  useSecret: true
+  secretName: s3-credentials
+
+deployNodeAgent: true
+
+nodeAgent:
+  podVolume:
+    privileged: true
